@@ -156,8 +156,19 @@ resource "aap_group" "tfaturboaapdemo" {
   inventory_id = data.aap_inventory.inventory.id
 }
 
+# Wait for the EC2 instance to be ready before proceeding
+resource "null_resource" "wait_for_instance" {
+  # This resource will wait until the EC2 instance is created
+  depends_on = [aws_instance.web_server]
+  # The provisioner will run a simple shell command that waits for port 22 to be available.
+  provisioner "local-exec" {
+    command = "until `timeout 1 bash -c 'cat < /dev/null > /dev/tcp/${aws_instance.web_server.public_ip}/22'`; do echo 'Waiting for port 22...'; sleep 5; done"
+  }
+}
+
 # Add the new EC2 instance to the dynamic inventory
 resource "aap_host" "new_host" {
+  depends_on      = [null_resource.wait_for_instance]
   inventory_id = data.aap_inventory.inventory.id
   groups = toset([resource.aap_group.tfaturboaapdemo.id])
   name         = aws_instance.web_server.public_ip
