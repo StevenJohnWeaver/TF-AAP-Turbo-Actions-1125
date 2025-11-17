@@ -123,6 +123,11 @@ resource "aws_instance" "web_server" {
     action_trigger {
       events  = [after_create]
       actions = [action.aap_eda_eventstream_post.create]
+      # Use depends_on here to ensure aap_host.new_host is created 
+      # and the host is in the inventory before the action runs.
+      depends_on = [
+        aap_host.new_host
+      ]
     }
   }
 }
