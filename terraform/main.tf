@@ -97,7 +97,7 @@ variable "turbo_hostname" {
 }
 
 data "turbonomic_cloud_entity_recommendation" "example" {
-  entity_name  = "exampleVirtualMachine"
+  entity_name  = "RHELVirtualMachine"
   entity_type  = "VirtualMachine"
   default_size = "t3.nano"
 }
@@ -111,7 +111,7 @@ resource "aws_instance" "web_server" {
   associate_public_ip_address = true
   tags = merge(
     {
-      Name = "exampleVirtualMachine"
+      Name = "RHELVirtualMachine"
       owner = "sjweaver"
     },
     provider::turbonomic::get_tag()
