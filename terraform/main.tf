@@ -9,7 +9,18 @@ terraform {
       source  = "hashicorp/aws"
       version = "~> 6.21"
     }
+    turbonomic = { 
+      source  = "IBM/turbonomic" 
+      version = "1.2.0"
+    }
   }
+}
+
+provider "turbonomic" {
+  hostname = var.turbo_hostname
+  username = var.turbo_username
+  password = var.turbo_password
+  skipverify = true
 }
 
 # Configure the AWS provider
@@ -67,18 +78,44 @@ variable "aap_password" {
   sensitive   = true
 }
 
+variable "turbo_username" {
+  description = "The username for the Turbonomic instance"
+  type        = string
+  sensitive   = false
+}
+
+variable "turbo_password" {
+  description = "The password for the Turbonomic instance"
+  type        = string
+  sensitive   = true
+}
+
+variable "turbo_hostname" {
+  description = "The hostname for the Turbonomic instance"
+  type        = string
+  sensitive   = false
+}
+
+data "turbonomic_cloud_entity_recommendation" "example" {
+  entity_name  = "exampleVirtualMachine"
+  entity_type  = "VirtualMachine"
+  default_size = "t3.nano"
+}
+
 # Provision the AWS EC2 instance(s)
 resource "aws_instance" "web_server" {
-  count                     = 3
   ami                       = "ami-0dfc569a8686b9320" # Red Hat Enterprise Linux 9 (HVM)
-  instance_type             = "t2.micro"
+  instance_type             = data.turbonomic_cloud_entity_recommendation.example.new_instance_type
   key_name                  = var.ssh_key_name
   vpc_security_group_ids    = [aws_security_group.allow_http_ssh.id]
   associate_public_ip_address = true
-  tags = {
-    Name = "hcp-terraform-aap-demo-${count.index + 1}"
-    owner = "sjweaver"
-  }
+  tags = merge(
+    {
+      Name = "exampleVirtualMachine"
+      owner = "sjweaver"
+    },
+    provider::turbonomic::get_tag()
+  )
   lifecycle {
     # This action triggers syntax new in terraform
     # It configures terraform to run the listed actions based
@@ -128,23 +165,22 @@ resource "aap_group" "tfademo" {
   inventory_id = data.aap_inventory.inventory.id
 }
 
-# Add the new EC2 instance to the inventory
-resource "aap_host" "host" {
-  for_each     = { for idx, instance in aws_instance.web_server : idx => instance }
+# Add the new EC2 instance to the dynamic inventory
+resource "aap_host" "new_host" {
   inventory_id = data.aap_inventory.inventory.id
   groups = toset([resource.aap_group.tfademo.id])
-  name         = each.value.public_ip
+  name         = aws_instance.web_server.public_ip
   description  = "Host provisioned by Terraform"
   variables    = jsonencode({
     ansible_user = "ec2-user"
-    public_ip    = each.value.public_ip
-    target_hosts = each.value.public_ip
+    public_ip = aws_instance.web_server.public_ip
+    target_hosts = aws_instance.web_server.public_ip
   })
 }
 
 # Output the public IP of the new instance
-output "web_server_public_ips" {
-  value = [for instance in aws_instance.web_server : instance.public_ip]
+output "web_server_public_ip" {
+  value = aws_instance.web_server.public_ip
 }
 
 # This is using a new 'aap_eventdispatch' action in the terraform-provider-aap POC
