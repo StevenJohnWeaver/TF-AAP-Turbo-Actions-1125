@@ -183,7 +183,7 @@ resource "aap_host" "new_host" {
     # It configures terraform to run the listed actions based
     # on the named lifecycle events: "After creating this resource, run the action"
     action_trigger {
-      events  = [after_create]
+      events  = [after_create, after_update]
       actions = [action.aap_eda_eventstream_post.create]
     }
   }
