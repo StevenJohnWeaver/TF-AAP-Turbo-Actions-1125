@@ -75,7 +75,7 @@ resource "aws_instance" "web_server" {
   key_name                  = var.ssh_key_name
   vpc_security_group_ids    = [aws_security_group.allow_http_ssh.id]
   associate_public_ip_address = true
-  tags {
+  tags = {
     Name = "hcp-terraform-aap-demo-${count.index + 1}"
     owner = "sjweaver"
   }
