@@ -160,15 +160,15 @@ data "aap_inventory" "inventory" {
 }
 
 # Create some infrastructure - inventory group - that has an action tied to it
-resource "aap_group" "tfademo" {
-  name = "tfademo"
+resource "aap_group" "tfa-turbo-aap-demo" {
+  name = "tfa-turbo-aap-demo"
   inventory_id = data.aap_inventory.inventory.id
 }
 
 # Add the new EC2 instance to the dynamic inventory
 resource "aap_host" "new_host" {
   inventory_id = data.aap_inventory.inventory.id
-  groups = toset([resource.aap_group.tfademo.id])
+  groups = toset([resource.aap_group.tfa-turbo-aap-demo.id])
   name         = aws_instance.web_server.public_ip
   description  = "Host provisioned by Terraform"
   variables    = jsonencode({
@@ -191,7 +191,7 @@ output "web_server_public_ip" {
 # TF action to run the new AWS provisioning workflow (after ec2 instance are created)
 action "aap_eda_eventstream_post" "create" {
   config {
-    limit = "tfademo"
+    limit = "tfa-turbo-aap-demo"
     template_type = "job"
     job_template_name = "New AWS Provisioning Workflow"
     organization_name = "Default"
