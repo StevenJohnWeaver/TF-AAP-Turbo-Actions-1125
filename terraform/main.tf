@@ -193,7 +193,7 @@ action "aap_eda_eventstream_post" "create" {
   config {
     limit = "tfa-turbo-aap-demo"
     template_type = "job"
-    job_template_name = "New AWS Provisioning Workflow"
+    job_template_name = "New AWS nginx Install Debian"
     organization_name = "Default"
 
     event_stream_config = {
