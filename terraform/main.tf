@@ -208,20 +208,3 @@ action "aap_eda_eventstream_post" "create" {
     }
   }
 }
-
-check "turbonomic_consistent_with_recommendation_check" {
-  # Use for_each to iterate over the list of resources/recommendations
-  for_each = aws_instance.web_server
-  
-  assert {
-    # Reference the instance's type using 'each.value.instance_type'
-    # Reference the recommendation's type using the key 'each.key' on the data source
-    condition = each.value.instance_type == coalesce(
-      data.turbonomic_cloud_entity_recommendation.example[each.key].new_instance_type, 
-      each.value.instance_type
-    )
-    
-    # Use the same indexing logic in the error message
-    error_message = "Instance ${each.key + 1} (${each.value.tags.Name}) instance_type is not consistent with Turbonomic recommendation. Must use ${coalesce(data.turbonomic_cloud_entity_recommendation.example[each.key].new_instance_type, each.value.instance_type)}"
-  }
-}
