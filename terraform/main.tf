@@ -97,21 +97,21 @@ variable "turbo_hostname" {
 }
 
 data "turbonomic_cloud_entity_recommendation" "example" {
-  entity_name  = "RHELVirtualMachine"
+  entity_name  = "EC2VirtualMachine"
   entity_type  = "VirtualMachine"
   default_size = "t3.nano"
 }
 
 # Provision the AWS EC2 instance(s)
 resource "aws_instance" "web_server" {
-  ami                       = "ami-0dfc569a8686b9320" # Red Hat Enterprise Linux 9 (HVM)
+  ami                       = "ami-0a7d80731ae1b2435" # Ubuntu Server 22.04 LTS (HVM)
   instance_type             = data.turbonomic_cloud_entity_recommendation.example.new_instance_type
   key_name                  = var.ssh_key_name
   vpc_security_group_ids    = [aws_security_group.allow_http_ssh.id]
   associate_public_ip_address = true
   tags = merge(
     {
-      Name = "RHELVirtualMachine"
+      Name = "EC2VirtualMachine"
       owner = "sjweaver"
     },
     provider::turbonomic::get_tag()
@@ -172,7 +172,7 @@ resource "aap_host" "new_host" {
   name         = aws_instance.web_server.public_ip
   description  = "Host provisioned by Terraform"
   variables    = jsonencode({
-    ansible_user = "ec2-user"
+    ansible_user = "ubuntu"
     public_ip = aws_instance.web_server.public_ip
     target_hosts = aws_instance.web_server.public_ip
   })
