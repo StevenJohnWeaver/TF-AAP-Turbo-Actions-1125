@@ -1,25 +1,40 @@
+terraform {
+  required_version = "~> v1.14.0"
+  required_providers {
+    turbonomic = { 
+      source  = "IBM/turbonomic" 
+      version = "1.2.0"
+    }
+    aap = {
+      source = "ansible/aap"
+      version = "1.4.0-devpreview1"
+    }
+    aws = {
+      source  = "hashicorp/aws"
+      version = "~> 5.0"
+    }
+  }
+}
+
 # Configure the AWS provider
 provider "aws" {
   region = "us-east-1"
 }
 
 # Configure the AAP provider
-# Using the AAP provider with Actions
-terraform {
-  required_version = "~> v1.14.0"
-  required_providers {
-    aap = {
-      source = "ansible/aap"
-      version = "1.4.0-devpreview1"
-    }
-  }
-}
-
 provider "aap" {
   host     = var.aap_host
   insecure_skip_verify = true
   username = var.aap_username
   password = var.aap_password
+}
+
+# Configure the Turbonomic provider
+provider "turbonomic" {
+  hostname = var.turbo_hostname
+  username = var.turbo_username
+  password = var.turbo_password
+  skipverify = true
 }
 
 # Variable to store the public key for the EC2 instance
@@ -64,10 +79,56 @@ variable "aap_password" {
   sensitive   = true
 }
 
-#variable "aap_job_template_id" {
-#  description = "The ID of the Job Template in AAP to run"
-#  type        = number
-#}
+variable "turbo_username" {
+  description = "The username for the Turbonomic instance"
+  type        = string
+  sensitive   = false
+}
+
+variable "turbo_password" {
+  description = "The password for the Turbonomic instance"
+  type        = string
+  sensitive   = true
+}
+
+variable "turbo_hostname" {
+  description = "The hostname for the Turbonomic instance"
+  type        = string
+  sensitive   = false
+}
+
+data "turbonomic_cloud_entity_recommendation" "example" {
+  count        = aws_instance.web_server.count
+  entity_name  = "hcp-terraform-aap-demo-${count.index + 1}"
+  entity_type  = "VirtualMachine"
+  default_size = "t3.nano"
+}
+
+# Provision the AWS EC2 instance(s)
+resource "aws_instance" "web_server" {
+  count                     = 3
+  ami                       = "ami-0dfc569a8686b9320" # Red Hat Enterprise Linux 9 (HVM)
+  instance_type             = data.turbonomic_cloud_entity_recommendation.example[count.index].new_instance_type
+  key_name                  = var.ssh_key_name
+  vpc_security_group_ids    = [aws_security_group.allow_http_ssh.id]
+  associate_public_ip_address = true
+  tags = merge(
+    {
+    Name = "hcp-terraform-aap-demo-${count.index + 1}"
+    owner = "sjweaver"
+    },
+    provider::turbonomic::get_tag()
+  )
+  lifecycle {
+    # This action triggers syntax new in terraform
+    # It configures terraform to run the listed actions based
+    # on the named lifecycle events: "After creating this resource, run the action"
+    action_trigger {
+      events  = [after_create]
+      actions = [action.aap_eda_eventstream_post.create]
+    }
+  }
+}
 
 resource "aws_security_group" "allow_http_ssh" {
   name        = "web-server-sg"
@@ -91,29 +152,6 @@ resource "aws_security_group" "allow_http_ssh" {
     to_port     = 0
     protocol    = "-1"
     cidr_blocks = ["0.0.0.0/0"]
-  }
-}
-
-# Provision the AWS EC2 instance(s)
-resource "aws_instance" "web_server" {
-  count                     = 1
-  ami                       = "ami-0dfc569a8686b9320" # Red Hat Enterprise Linux 9 (HVM)
-  instance_type             = "t2.micro"
-  key_name                  = var.ssh_key_name
-  vpc_security_group_ids    = [aws_security_group.allow_http_ssh.id]
-  associate_public_ip_address = true
-  tags = {
-    Name = "hcp-terraform-aap-demo-${count.index + 1}"
-    owner = "sjweaver"
-  }
-  lifecycle {
-    # This action triggers syntax new in terraform
-    # It configures terraform to run the listed actions based
-    # on the named lifecycle events: "After creating this resource, run the action"
-    action_trigger {
-      events  = [after_create]
-      actions = [action.aap_eda_eventstream_post.create]
-    }
   }
 }
 
@@ -168,5 +206,22 @@ action "aap_eda_eventstream_post" "create" {
       username = var.tf-es-username
       password = var.tf-es-password
     }
+  }
+}
+
+check "turbonomic_consistent_with_recommendation_check" {
+  # Use for_each to iterate over the list of resources/recommendations
+  for_each = aws_instance.web_server
+  
+  assert {
+    # Reference the instance's type using 'each.value.instance_type'
+    # Reference the recommendation's type using the key 'each.key' on the data source
+    condition = each.value.instance_type == coalesce(
+      data.turbonomic_cloud_entity_recommendation.example[each.key].new_instance_type, 
+      each.value.instance_type
+    )
+    
+    # Use the same indexing logic in the error message
+    error_message = "Instance ${each.key + 1} (${each.value.tags.Name}) instance_type is not consistent with Turbonomic recommendation. Must use ${coalesce(data.turbonomic_cloud_entity_recommendation.example[each.key].new_instance_type, each.value.instance_type)}"
   }
 }
