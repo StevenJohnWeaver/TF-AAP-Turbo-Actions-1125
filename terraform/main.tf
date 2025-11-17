@@ -116,20 +116,6 @@ resource "aws_instance" "web_server" {
     },
     provider::turbonomic::get_tag()
   )
-  lifecycle {
-    # This action triggers syntax new in terraform
-    # It configures terraform to run the listed actions based
-    # on the named lifecycle events: "After creating this resource, run the action"
-    action_trigger {
-      events  = [after_create]
-      actions = [action.aap_eda_eventstream_post.create]
-      # Use depends_on here to ensure aap_host.new_host is created 
-      # and the host is in the inventory before the action runs.
-      depends_on = [
-        aap_host.new_host
-      ]
-    }
-  }
 }
 
 resource "aws_security_group" "allow_http_ssh" {
@@ -181,6 +167,15 @@ resource "aap_host" "new_host" {
     public_ip = aws_instance.web_server.public_ip
     target_hosts = aws_instance.web_server.public_ip
   })
+  lifecycle {
+    # This action triggers syntax new in terraform
+    # It configures terraform to run the listed actions based
+    # on the named lifecycle events: "After creating this resource, run the action"
+    action_trigger {
+      events  = [after_create]
+      actions = [action.aap_eda_eventstream_post.create]
+    }
+  }
 }
 
 # Output the public IP of the new instance
